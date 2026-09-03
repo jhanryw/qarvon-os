@@ -27,6 +27,17 @@ FROM base AS runner
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# ARG não propaga entre stages: precisa ser redeclarado aqui. Código
+# server-side (proxy.ts, lib/supabase/server.ts) lê process.env em runtime,
+# não em build-time — só o bundle do browser é resolvido no build. Sem isto,
+# o processo Next.js no container não teria essas variáveis mesmo com o
+# client bundle já correto, causando "Your project's URL and Key are
+# required..." em qualquer rota que use o Supabase server-side (ex.: "/").
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
+ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
+ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
+
 RUN addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 nextjs
 
