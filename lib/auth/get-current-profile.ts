@@ -25,11 +25,18 @@ export async function getCurrentUser(): Promise<CurrentUser> {
     return { status: "unauthenticated" };
   }
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("*")
     .eq("id", user.id)
     .maybeSingle();
+
+  // Erro real (ex.: tabela inexistente, falha de conexão) não é a mesma
+  // coisa que "sem profile" — tratá-los igual mascararia um problema de
+  // infraestrutura como se fosse só conta não vinculada.
+  if (profileError) {
+    throw new Error(`Falha ao consultar profiles: ${profileError.message}`);
+  }
 
   if (!profile) {
     return { status: "no-profile" };
@@ -39,14 +46,16 @@ export async function getCurrentUser(): Promise<CurrentUser> {
     return { status: "inactive", profile };
   }
 
-  const { data: organization } = await supabase
+  const { data: organization, error: organizationError } = await supabase
     .from("organizations")
     .select("*")
     .eq("id", profile.organization_id)
     .single();
 
-  if (!organization) {
-    return { status: "no-profile" };
+  if (organizationError || !organization) {
+    throw new Error(
+      `Falha ao consultar organization do profile: ${organizationError?.message ?? "não encontrada"}`,
+    );
   }
 
   return { status: "authorized", profile, organization };

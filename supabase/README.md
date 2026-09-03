@@ -21,14 +21,21 @@ Postgres. Duas formas equivalentes, a definir quando a conexão real for
 fornecida:
 
 ```bash
-# Opção 1: psql direto, em ordem
+# Opção 1: psql direto, em ordem, parando no primeiro erro
 for f in supabase/migrations/*.sql; do
-  psql "$SUPABASE_DB_URL" -f "$f"
+  echo "Applying: $f"
+  psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f "$f" || { echo "FALHOU em $f — pare e investigue antes de corrigir"; break; }
 done
 
 # Opção 2: Supabase CLI apontando para a instância via connection string
 # (não usa "supabase link" / não trata o projeto como Supabase Cloud)
 supabase db push --db-url "$SUPABASE_DB_URL"
+```
+
+Antes de aplicar, sempre confirme o destino da conexão (nunca Santtorini):
+
+```sql
+select current_database(), inet_server_addr(), inet_server_port();
 ```
 
 Nunca aplicar alteração de schema manualmente fora de uma migration versionada.
