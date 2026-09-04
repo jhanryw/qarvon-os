@@ -84,10 +84,18 @@ nunca são excluídos, `lead_sources` se desativa via `active = false`.
 
 ---
 
-## M2.1 — Schema do Pipeline (implementado)
+## M2.1 — Schema do Pipeline (implementado, homologado)
 
 Somente schema — sem Kanban, sem drag-and-drop, sem mudança de estágio pela
 aplicação ainda (isso é M2.2). Conforme `docs/ARCHITECTURE.md` §10.
+
+**Dívida técnica registrada**: `types/database.ts` não foi regenerado ao
+final do M2.1 — o schema não tem nenhum consumidor TypeScript ainda,
+então regenerar tipos não utilizados adicionaria complexidade
+operacional sem benefício imediato. **Regenerar `types/database.ts` a
+partir do banco self-hosted real antes da implementação do data/server
+layer do M2.2** (antes de qualquer código que consuma `pipelines`,
+`pipeline_stages` ou `lead_stage_history`).
 
 ### pipelines
 
