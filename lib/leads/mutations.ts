@@ -271,16 +271,30 @@ export async function updateLead(
       ? normalizeNextActionAt(parsed.nextActionAt)
       : null;
 
+  // maybeSingle() em vez de single(): single() só detecta "0 linhas" se o
+  // PostgREST devolver o 406 esperado — sem checagem no lado do cliente.
+  // maybeSingle() converte array vazio em null de forma confiável
+  // independente da resposta do servidor, então conseguimos checar
+  // explicitamente abaixo em vez de arriscar tratar 0 linhas como sucesso.
   const { data, error } = await supabase
     .from("leads")
     .update(payload)
     .eq("id", leadId)
     .eq("organization_id", organizationId)
     .select("*")
-    .single();
+    .maybeSingle();
 
   if (error) {
     throw mapInsertError(error);
+  }
+  if (!data) {
+    // A checagem de existência acima, segundos antes, usou o mesmo filtro
+    // id+organization_id e encontrou a linha — se o UPDATE não retornou
+    // nada agora, é um estado inesperado, não "não encontrado" normal.
+    throw new AppError(
+      "DATABASE_ERROR",
+      "Falha ao salvar lead: nenhuma linha foi atualizada.",
+    );
   }
   return data;
 }

@@ -199,4 +199,65 @@ describe("updateLead", () => {
       updateLead(LEAD_ID, { whatsapp: "84999999999" }),
     ).rejects.toMatchObject({ code: "DUPLICATE_WHATSAPP" });
   });
+
+  // Regressão: updateLead() usava .single() no UPDATE final, que só detecta
+  // "0 linhas afetadas" se o PostgREST devolver o 406 esperado — sem
+  // checagem no lado do cliente. Se o servidor não devolver esse erro (ex.:
+  // retorna array vazio com 200), single() deixa passar como sucesso com
+  // data vazio/malformado. maybeSingle() + checagem explícita de `!data`
+  // fecha essa lacuna independente do que o servidor realmente responde.
+  it("nao considera sucesso quando o UPDATE nao afeta nenhuma linha (0 rows, sem erro do servidor)", async () => {
+    const fake = fakeSupabase([
+      { data: { id: LEAD_ID }, error: null }, // existence check: ok
+      { data: null, error: null }, // update: 0 linhas, sem erro explícito do servidor
+    ]);
+    createClient.mockResolvedValue(fake.client);
+
+    await expect(
+      updateLead(LEAD_ID, { name: "Novo Nome" }),
+    ).rejects.toMatchObject({ code: "DATABASE_ERROR" });
+  });
+
+  it("propaga erro real do servidor quando o UPDATE falha explicitamente", async () => {
+    const fake = fakeSupabase([
+      { data: { id: LEAD_ID }, error: null }, // existence check: ok
+      {
+        data: null,
+        error: { message: "permission denied for table leads", code: "42501" },
+      }, // update: erro explícito
+    ]);
+    createClient.mockResolvedValue(fake.client);
+
+    await expect(
+      updateLead(LEAD_ID, { name: "Novo Nome" }),
+    ).rejects.toMatchObject({ code: "DATABASE_ERROR" });
+  });
+
+  it("aplica um payload completo com múltiplos campos alterados de uma vez (cenário real de edição)", async () => {
+    const fake = fakeSupabase([
+      { data: { id: LEAD_ID }, error: null }, // existence check
+      { data: { id: VALID_OWNER_ID }, error: null }, // owner check: pertence ao tenant
+      {
+        data: { id: LEAD_ID, name: "Jhanry Editado" },
+        error: null,
+      }, // update
+    ]);
+    createClient.mockResolvedValue(fake.client);
+
+    await updateLead(LEAD_ID, {
+      name: "Jhanry Editado",
+      company: "Nova Empresa",
+      ownerId: VALID_OWNER_ID,
+      temperature: "HOT",
+      nextAction: "Ligar amanhã",
+    });
+
+    expect(fake.calls.update[0]).toEqual({
+      name: "Jhanry Editado",
+      company: "Nova Empresa",
+      owner_id: VALID_OWNER_ID,
+      temperature: "HOT",
+      next_action: "Ligar amanhã",
+    });
+  });
 });
