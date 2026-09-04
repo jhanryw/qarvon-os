@@ -1,12 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getTenantContext } from "@/lib/auth/tenant-context";
 import { AppError } from "@/lib/errors";
-import {
-  createLeadSchema,
-  updateLeadSchema,
-  type CreateLeadInput,
-  type UpdateLeadInput,
-} from "@/lib/leads/schemas";
+import { createLeadSchema, updateLeadSchema } from "@/lib/leads/schemas";
 import {
   normalizeEmail,
   normalizeEstimatedValue,
@@ -130,7 +125,7 @@ function mapInsertError(error: { code?: string; message: string }): AppError {
   return new AppError("DATABASE_ERROR", "Falha ao salvar lead.", error);
 }
 
-export async function createLead(input: CreateLeadInput): Promise<Lead> {
+export async function createLead(input: unknown): Promise<Lead> {
   const parsed = createLeadSchema.parse(input);
   const { organizationId } = await getTenantContext();
   const supabase = await createClient();
@@ -191,7 +186,7 @@ export async function createLead(input: CreateLeadInput): Promise<Lead> {
 
 export async function updateLead(
   leadId: string,
-  input: UpdateLeadInput,
+  input: unknown,
 ): Promise<Lead> {
   const parsed = updateLeadSchema.parse(input);
   const { organizationId } = await getTenantContext();

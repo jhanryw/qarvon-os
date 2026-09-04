@@ -148,7 +148,6 @@ describe("updateLead", () => {
   it("não aceita organization_id no input (rejeitado pelo schema)", async () => {
     await expect(
       updateLead(LEAD_ID, {
-        // @ts-expect-error -- organization_id não existe no schema de input
         organization_id: "outra-org",
       }),
     ).rejects.toThrow();
