@@ -70,5 +70,6 @@ describe("getTenantContext", () => {
     const ctx = await getTenantContext();
     expect(ctx.organizationId).toBe("org-1");
     expect(ctx.profile.id).toBe("user-1");
+    expect(ctx.organization.timezone).toBe("America/Sao_Paulo");
   });
 });

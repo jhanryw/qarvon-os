@@ -57,16 +57,49 @@ export async function listLeadSources(
   return data;
 }
 
+export interface LeadListItem extends Lead {
+  ownerName: string | null;
+  leadSourceName: string | null;
+}
+
 export interface ListLeadsResult {
-  leads: Lead[];
+  leads: LeadListItem[];
   page: number;
   pageSize: number;
   total: number;
 }
 
-// Consulta preparada para a listagem (UI vem no M1.4). Organização sempre
-// do contexto do servidor; busca cobre name/company/whatsapp via ILIKE —
-// aceitável no volume atual (ver nota de escala no README de leads).
+// Resolve nomes de owner/lead_source para um conjunto de leads em no
+// máximo 2 queries extras (uma por tabela, com .in()) — nunca uma consulta
+// por linha. organization_id como defesa extra, mesmo a FK composta já
+// garantindo que só há ids da própria organização aqui.
+async function resolveNames(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  organizationId: string,
+  table: "profiles" | "lead_sources",
+  ids: string[],
+): Promise<Map<string, string>> {
+  if (ids.length === 0) return new Map();
+
+  const { data, error } = await supabase
+    .from(table)
+    .select("id, name")
+    .eq("organization_id", organizationId)
+    .in("id", ids);
+
+  if (error) {
+    throw new AppError(
+      "DATABASE_ERROR",
+      `Falha ao consultar ${table === "profiles" ? "responsáveis" : "origens"}.`,
+      error,
+    );
+  }
+  return new Map(data.map((row) => [row.id, row.name]));
+}
+
+// Consulta preparada para a listagem. Organização sempre do contexto do
+// servidor; busca cobre name/company/whatsapp via ILIKE — aceitável no
+// volume atual (ver nota de escala no README de leads).
 export async function listLeads(
   input: ListLeadsInput = {},
 ): Promise<ListLeadsResult> {
@@ -90,10 +123,14 @@ export async function listLeads(
       `name.ilike.${term},company.ilike.${term},whatsapp.ilike.${term}`,
     );
   }
-  if (parsed.ownerId) {
+  if (parsed.ownerId === "none") {
+    query = query.is("owner_id", null);
+  } else if (parsed.ownerId) {
     query = query.eq("owner_id", parsed.ownerId);
   }
-  if (parsed.leadSourceId) {
+  if (parsed.leadSourceId === "none") {
+    query = query.is("lead_source_id", null);
+  } else if (parsed.leadSourceId) {
     query = query.eq("lead_source_id", parsed.leadSourceId);
   }
   if (parsed.temperature) {
@@ -108,8 +145,34 @@ export async function listLeads(
     throw new AppError("DATABASE_ERROR", "Falha ao consultar leads.", error);
   }
 
+  const ownerIds = [
+    ...new Set(
+      data.map((lead) => lead.owner_id).filter((id): id is string => id !== null),
+    ),
+  ];
+  const sourceIds = [
+    ...new Set(
+      data
+        .map((lead) => lead.lead_source_id)
+        .filter((id): id is string => id !== null),
+    ),
+  ];
+
+  const [ownerNames, sourceNames] = await Promise.all([
+    resolveNames(supabase, organizationId, "profiles", ownerIds),
+    resolveNames(supabase, organizationId, "lead_sources", sourceIds),
+  ]);
+
+  const leads: LeadListItem[] = data.map((lead) => ({
+    ...lead,
+    ownerName: lead.owner_id ? (ownerNames.get(lead.owner_id) ?? null) : null,
+    leadSourceName: lead.lead_source_id
+      ? (sourceNames.get(lead.lead_source_id) ?? null)
+      : null,
+  }));
+
   return {
-    leads: data,
+    leads,
     page: parsed.page,
     pageSize: parsed.pageSize,
     total: count ?? 0,

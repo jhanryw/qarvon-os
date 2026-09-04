@@ -1,16 +1,50 @@
 import { Card } from "@/components/ui/card";
 import { listLeadSources, listLeads } from "@/lib/leads/queries";
 import { listOrganizationProfiles } from "@/lib/profiles/queries";
+import { getTenantContext } from "@/lib/auth/tenant-context";
+import { parseLeadListSearchParams } from "@/lib/leads/search-params";
+import { AppError } from "@/lib/errors";
 import { NewLeadButton } from "@/app/(app)/crm/new-lead-button";
+import { LeadsFilterBar } from "@/app/(app)/crm/leads-filter-bar";
+import { LeadsTable } from "@/app/(app)/crm/leads-table";
+import { LeadsPagination } from "@/app/(app)/crm/leads-pagination";
+import type { ListLeadsResult } from "@/lib/leads/queries";
 
-export default async function CrmPage() {
-  const [leadSources, profiles, leadsSummary] = await Promise.all([
+const PAGE_SIZE = 20;
+
+interface CrmPageProps {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
+
+export default async function CrmPage({ searchParams }: CrmPageProps) {
+  const params = parseLeadListSearchParams(await searchParams);
+
+  const [leadSources, profiles, { organization }] = await Promise.all([
     listLeadSources(),
     listOrganizationProfiles(),
-    listLeads({ pageSize: 1 }),
+    getTenantContext(),
   ]);
 
-  const total = leadsSummary.total;
+  // Erro real de infraestrutura não pode parecer "nenhum lead cadastrado" —
+  // são estados completamente diferentes para quem opera o CRM.
+  let leadsResult: ListLeadsResult | null = null;
+  try {
+    leadsResult = await listLeads({
+      page: params.page,
+      pageSize: PAGE_SIZE,
+      search: params.search,
+      ownerId: params.ownerId,
+      leadSourceId: params.leadSourceId,
+      temperature: params.temperature,
+    });
+  } catch (error) {
+    if (!(error instanceof AppError)) throw error;
+  }
+
+  const hasFilters = Boolean(
+    params.search || params.ownerId || params.leadSourceId || params.temperature,
+  );
+  const total = leadsResult?.total ?? 0;
 
   return (
     <div>
@@ -18,21 +52,51 @@ export default async function CrmPage() {
         <div>
           <h1 className="text-xl font-semibold text-neutral-900">CRM</h1>
           <p className="text-sm text-neutral-500">
-            {total === 0
-              ? "Nenhum lead cadastrado ainda."
-              : `${total} lead${total === 1 ? "" : "s"} cadastrado${total === 1 ? "" : "s"}.`}
+            {leadsResult === null
+              ? " "
+              : total === 0
+                ? "Nenhum lead cadastrado ainda."
+                : `${total} lead${total === 1 ? "" : "s"} cadastrado${total === 1 ? "" : "s"}.`}
           </p>
         </div>
         <NewLeadButton leadSources={leadSources} profiles={profiles} />
       </div>
 
-      {total === 0 && (
+      {leadsResult === null ? (
+        <Card>
+          <p className="text-sm text-red-700">
+            Não foi possível carregar os leads agora. Tente novamente em
+            instantes.
+          </p>
+        </Card>
+      ) : total === 0 && !hasFilters ? (
         <Card>
           <p className="text-sm text-neutral-500">
             Cadastre seu primeiro lead para começar a organizar o funil
             comercial.
           </p>
         </Card>
+      ) : (
+        <>
+          <LeadsFilterBar leadSources={leadSources} profiles={profiles} />
+          {leadsResult.leads.length === 0 ? (
+            <Card>
+              <p className="text-sm text-neutral-500">
+                Nenhum lead encontrado com os filtros atuais.
+              </p>
+            </Card>
+          ) : (
+            <LeadsTable
+              leads={leadsResult.leads}
+              timezone={organization.timezone}
+            />
+          )}
+          <LeadsPagination
+            page={leadsResult.page}
+            pageSize={leadsResult.pageSize}
+            total={leadsResult.total}
+          />
+        </>
       )}
     </div>
   );

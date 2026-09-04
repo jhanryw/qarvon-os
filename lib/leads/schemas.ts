@@ -43,13 +43,17 @@ export type UpdateLeadInput = z.infer<typeof updateLeadSchema>;
 const MAX_PAGE_SIZE = 100;
 const DEFAULT_PAGE_SIZE = 20;
 
+// "none" é um filtro válido e diferente de "sem filtro": significa
+// explicitamente owner_id/lead_source_id IS NULL (ex.: "Sem responsável").
+const ownerOrSourceFilterSchema = z.union([z.string().uuid(), z.literal("none")]);
+
 export const listLeadsSchema = z
   .object({
     page: z.number().int().positive().default(1),
     pageSize: z.number().int().positive().max(MAX_PAGE_SIZE).default(DEFAULT_PAGE_SIZE),
     search: z.string().trim().min(1).optional(),
-    ownerId: z.string().uuid().optional(),
-    leadSourceId: z.string().uuid().optional(),
+    ownerId: ownerOrSourceFilterSchema.optional(),
+    leadSourceId: ownerOrSourceFilterSchema.optional(),
     temperature: leadTemperatureSchema.optional(),
     hasPendingNextAction: z.boolean().optional(),
   })

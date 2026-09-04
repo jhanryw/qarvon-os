@@ -4,11 +4,12 @@
 // bundler já barra este módulo se algo tentar importá-lo no client, por
 // causa dessa mesma dependência).
 import { getCurrentUser } from "@/lib/auth/get-current-profile";
-import type { Profile } from "@/lib/auth/get-current-profile";
+import type { Organization, Profile } from "@/lib/auth/get-current-profile";
 import { AppError } from "@/lib/errors";
 
 export interface TenantContext {
   profile: Profile;
+  organization: Organization;
   organizationId: string;
 }
 
@@ -31,6 +32,7 @@ export async function getTenantContext(): Promise<TenantContext> {
     case "authorized":
       return {
         profile: user.profile,
+        organization: user.organization,
         organizationId: user.profile.organization_id,
       };
   }
