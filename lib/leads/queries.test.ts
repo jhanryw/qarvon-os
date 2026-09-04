@@ -97,7 +97,10 @@ function fakeSupabaseForListLeads(config: {
       select: () => chain,
       order: () => chain,
       range: () => chain,
-      or: () => chain,
+      or: (...args: unknown[]) => {
+        if (trackFilters) leadsFilterCalls.push({ method: "or", args });
+        return chain;
+      },
       not: () => chain,
       in: () => chain,
       eq: (...args: unknown[]) => {
@@ -247,6 +250,20 @@ describe("listLeads", () => {
     );
     expect(ownerFilter?.method).toBe("is");
     expect(ownerFilter?.args).toEqual(["owner_id", null]);
+  });
+
+  it("aplica busca via .or() com o termo escapado nas 3 colunas (name/company/whatsapp)", async () => {
+    const fake = fakeSupabaseForListLeads({
+      leads: { data: [], error: null, count: 0 },
+    });
+    createClient.mockResolvedValue(fake.client);
+
+    await listLeads({ search: "50%_x" });
+
+    const orFilter = fake.leadsFilterCalls.find((call) => call.method === "or");
+    expect(orFilter?.args[0]).toBe(
+      "name.ilike.%50\\%\\_x%,company.ilike.%50\\%\\_x%,whatsapp.ilike.%50\\%\\_x%",
+    );
   });
 
   it("sempre escopa a query por organization_id do contexto do tenant", async () => {
