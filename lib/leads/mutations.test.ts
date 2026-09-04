@@ -187,4 +187,16 @@ describe("updateLead", () => {
     await updateLead(LEAD_ID, { email: "  Novo@Qarvon.COM  " });
     expect(fake.calls.update[0]).toEqual({ email: "novo@qarvon.com" });
   });
+
+  it("trocar para o WhatsApp de outro lead do mesmo tenant é rejeitado", async () => {
+    const fake = fakeSupabase([
+      { data: { id: LEAD_ID }, error: null }, // existence check: ok
+      { data: { id: "outro-lead-id" }, error: null }, // duplicate check: já existe em outro lead
+    ]);
+    createClient.mockResolvedValue(fake.client);
+
+    await expect(
+      updateLead(LEAD_ID, { whatsapp: "84999999999" }),
+    ).rejects.toMatchObject({ code: "DUPLICATE_WHATSAPP" });
+  });
 });

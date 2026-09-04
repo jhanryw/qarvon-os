@@ -5,9 +5,7 @@ import { getTenantContext } from "@/lib/auth/tenant-context";
 import { parseLeadListSearchParams } from "@/lib/leads/search-params";
 import { AppError } from "@/lib/errors";
 import { NewLeadButton } from "@/app/(app)/crm/new-lead-button";
-import { LeadsFilterBar } from "@/app/(app)/crm/leads-filter-bar";
-import { LeadsTable } from "@/app/(app)/crm/leads-table";
-import { LeadsPagination } from "@/app/(app)/crm/leads-pagination";
+import { LeadsListSection } from "@/app/(app)/crm/leads-list-section";
 import type { ListLeadsResult } from "@/lib/leads/queries";
 
 const PAGE_SIZE = 20;
@@ -77,26 +75,15 @@ export default async function CrmPage({ searchParams }: CrmPageProps) {
           </p>
         </Card>
       ) : (
-        <>
-          <LeadsFilterBar leadSources={leadSources} profiles={profiles} />
-          {leadsResult.leads.length === 0 ? (
-            <Card>
-              <p className="text-sm text-neutral-500">
-                Nenhum lead encontrado com os filtros atuais.
-              </p>
-            </Card>
-          ) : (
-            <LeadsTable
-              leads={leadsResult.leads}
-              timezone={organization.timezone}
-            />
-          )}
-          <LeadsPagination
-            page={leadsResult.page}
-            pageSize={leadsResult.pageSize}
-            total={leadsResult.total}
-          />
-        </>
+        <LeadsListSection
+          leads={leadsResult.leads}
+          timezone={organization.timezone}
+          leadSources={leadSources}
+          profiles={profiles}
+          page={leadsResult.page}
+          pageSize={leadsResult.pageSize}
+          total={leadsResult.total}
+        />
       )}
     </div>
   );

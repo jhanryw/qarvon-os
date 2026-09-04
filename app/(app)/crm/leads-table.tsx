@@ -10,6 +10,7 @@ import {
 interface LeadsTableProps {
   leads: LeadListItem[];
   timezone: string;
+  onEditLead: (leadId: string) => void;
 }
 
 const COLUMNS = [
@@ -21,16 +22,19 @@ const COLUMNS = [
   "Temperatura",
   "Próxima ação",
   "Criado em",
+  "",
 ];
 
-export function LeadsTable({ leads, timezone }: LeadsTableProps) {
+// Ação "Editar" explícita em vez de linha inteira clicável — clicar na
+// linha atrapalharia selecionar/copiar o WhatsApp ou o nome.
+export function LeadsTable({ leads, timezone, onEditLead }: LeadsTableProps) {
   return (
     <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
-      <table className="w-full min-w-[860px] text-left text-sm">
+      <table className="w-full min-w-[920px] text-left text-sm">
         <thead className="border-b border-neutral-200 bg-neutral-50 text-xs font-medium uppercase tracking-wide text-neutral-500">
           <tr>
-            {COLUMNS.map((column) => (
-              <th key={column} scope="col" className="px-4 py-2">
+            {COLUMNS.map((column, index) => (
+              <th key={column || `col-${index}`} scope="col" className="px-4 py-2">
                 {column}
               </th>
             ))}
@@ -64,6 +68,16 @@ export function LeadsTable({ leads, timezone }: LeadsTableProps) {
               </td>
               <td className="px-4 py-2 text-neutral-500">
                 {formatDateTime(lead.created_at, timezone)}
+              </td>
+              <td className="px-4 py-2 text-right">
+                <button
+                  type="button"
+                  onClick={() => onEditLead(lead.id)}
+                  aria-label={`Editar ${lead.name}`}
+                  className="rounded-md px-2 py-1 text-sm font-medium text-neutral-700 hover:bg-neutral-100 hover:text-neutral-900"
+                >
+                  Editar
+                </button>
               </td>
             </tr>
           ))}

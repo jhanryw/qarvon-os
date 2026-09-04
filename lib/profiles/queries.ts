@@ -5,22 +5,39 @@ import { AppError } from "@/lib/errors";
 export interface ProfileOption {
   id: string;
   name: string;
+  active: boolean;
 }
 
-// Lista mínima para seletores (ex.: "Responsável" no cadastro de lead): só
-// id/name, só profiles ativos da organização atual. RLS normal — sem
+export interface ListOrganizationProfilesOptions {
+  includeInactive?: boolean;
+}
+
+// Lista mínima para seletores (ex.: "Responsável" no cadastro/edição de
+// lead): só id/name/active, só da organização atual. RLS normal — sem
 // service role. organization_id sempre do contexto do servidor.
-export async function listOrganizationProfiles(): Promise<ProfileOption[]> {
+//
+// Por padrão só profiles ativos (cadastro de lead novo não deve oferecer
+// um responsável inativo). Na edição de um lead que já tem um responsável
+// que depois ficou inativo, includeInactive garante que esse profile
+// ainda apareça como opção — sem isso o formulário perderia o valor atual
+// silenciosamente.
+export async function listOrganizationProfiles(
+  options: ListOrganizationProfilesOptions = {},
+): Promise<ProfileOption[]> {
   const { organizationId } = await getTenantContext();
   const supabase = await createClient();
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("profiles")
-    .select("id, name")
+    .select("id, name, active")
     .eq("organization_id", organizationId)
-    .eq("active", true)
     .order("name", { ascending: true });
 
+  if (!options.includeInactive) {
+    query = query.eq("active", true);
+  }
+
+  const { data, error } = await query;
   if (error) {
     throw new AppError(
       "DATABASE_ERROR",
