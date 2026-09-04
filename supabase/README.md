@@ -43,14 +43,17 @@ Nunca editar uma migration já aplicada — criar uma nova.
 
 ## Geração de tipos TypeScript
 
-`types/database.ts` hoje é escrito manualmente, no formato de saída do CLI,
-como placeholder até haver conexão com um banco real.
+`types/database.ts` é gerado a partir do schema real (homologado contra a
+instância Qarvon self-hosted) — não é mais um placeholder manual. Ao alterar
+o schema, regenerar:
 
 ```bash
 # Ambiente local (supabase start)
 supabase gen types typescript --local > types/database.ts
 
 # Instância self-hosted, via connection string direta
+# (a CLI usa docker internamente — rodar em uma máquina/host onde `docker`
+# esteja disponível, não dentro de um container isolado sem acesso a ele)
 supabase gen types typescript --db-url "$SUPABASE_DB_URL" > types/database.ts
 ```
 
@@ -60,6 +63,11 @@ Ver [`BOOTSTRAP.md`](./BOOTSTRAP.md).
 
 ## Testes de RLS
 
-Ver [`tests/database/rls_isolation.sql`](./tests/database/rls_isolation.sql)
-(pgTAP, roda via `supabase test db` — depende do ambiente local do CLI, não
-executável neste ambiente do agente).
+Isolamento multi-tenant foi validado empiricamente contra a instância Qarvon
+self-hosted real (não só revisão estática): `anon` sem acesso, `authenticated`
+sem profile sem acesso, isolamento cross-tenant comprovado nos dois sentidos,
+INSERT/UPDATE/DELETE bloqueados para `authenticated` nas duas tabelas — tudo
+dentro de uma transação com dados temporários e `ROLLBACK` ao final (nenhum
+dado de teste persistiu). Também existe
+[`tests/database/rls_isolation.sql`](./tests/database/rls_isolation.sql)
+(pgTAP, roda via `supabase test db`) para quem tiver o ambiente local do CLI.
