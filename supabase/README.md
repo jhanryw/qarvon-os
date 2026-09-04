@@ -38,6 +38,13 @@ Antes de aplicar, sempre confirme o destino da conexão (nunca Santtorini):
 select current_database(), inet_server_addr(), inet_server_port();
 ```
 
+**Importante (self-hosted):** `postgres` não é superuser nesta instância e
+não é dono de tabelas criadas pelo próprio Supabase (`organizations`,
+`profiles` pertencem a `supabase_admin`). `CREATE TABLE` novo funciona como
+`postgres`, mas `ALTER TABLE` em objetos pré-existentes do Supabase exige
+`supabase_admin` (o superuser real). Para consistência, DDL de schema deve
+rodar como `supabase_admin`, não `postgres`.
+
 Nunca aplicar alteração de schema manualmente fora de uma migration versionada.
 Nunca editar uma migration já aplicada — criar uma nova.
 

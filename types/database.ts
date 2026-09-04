@@ -9,6 +9,141 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      lead_sources: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          name: string
+          organization_id: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          name: string
+          organization_id: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          name?: string
+          organization_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_sources_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      leads: {
+        Row: {
+          campaign: string | null
+          city: string | null
+          company: string | null
+          created_at: string
+          email: string | null
+          estimated_value: number | null
+          id: string
+          instagram: string | null
+          lead_source_id: string | null
+          name: string
+          next_action: string | null
+          next_action_at: string | null
+          note: string | null
+          organization_id: string
+          owner_id: string | null
+          revenue_range: string | null
+          segment: string | null
+          service_interest: string | null
+          state: string | null
+          temperature: Database["public"]["Enums"]["lead_temperature"] | null
+          updated_at: string
+          website: string | null
+          whatsapp: string | null
+        }
+        Insert: {
+          campaign?: string | null
+          city?: string | null
+          company?: string | null
+          created_at?: string
+          email?: string | null
+          estimated_value?: number | null
+          id?: string
+          instagram?: string | null
+          lead_source_id?: string | null
+          name: string
+          next_action?: string | null
+          next_action_at?: string | null
+          note?: string | null
+          organization_id: string
+          owner_id?: string | null
+          revenue_range?: string | null
+          segment?: string | null
+          service_interest?: string | null
+          state?: string | null
+          temperature?: Database["public"]["Enums"]["lead_temperature"] | null
+          updated_at?: string
+          website?: string | null
+          whatsapp?: string | null
+        }
+        Update: {
+          campaign?: string | null
+          city?: string | null
+          company?: string | null
+          created_at?: string
+          email?: string | null
+          estimated_value?: number | null
+          id?: string
+          instagram?: string | null
+          lead_source_id?: string | null
+          name?: string
+          next_action?: string | null
+          next_action_at?: string | null
+          note?: string | null
+          organization_id?: string
+          owner_id?: string | null
+          revenue_range?: string | null
+          segment?: string | null
+          service_interest?: string | null
+          state?: string | null
+          temperature?: Database["public"]["Enums"]["lead_temperature"] | null
+          updated_at?: string
+          website?: string | null
+          whatsapp?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leads_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_owner_same_organization"
+            columns: ["owner_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id", "organization_id"]
+          },
+          {
+            foreignKeyName: "leads_source_same_organization"
+            columns: ["lead_source_id", "organization_id"]
+            isOneToOne: false
+            referencedRelation: "lead_sources"
+            referencedColumns: ["id", "organization_id"]
+          },
+        ]
+      }
       organizations: {
         Row: {
           created_at: string
@@ -82,6 +217,7 @@ export type Database = {
       current_profile_organization_id: { Args: never; Returns: string }
     }
     Enums: {
+      lead_temperature: "COLD" | "WARM" | "HOT"
       user_role: "ADMIN" | "SALES"
     }
     CompositeTypes: {
@@ -210,6 +346,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      lead_temperature: ["COLD", "WARM", "HOT"],
       user_role: ["ADMIN", "SALES"],
     },
   },

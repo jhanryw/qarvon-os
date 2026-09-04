@@ -48,29 +48,38 @@ administrativo, ver `supabase/BOOTSTRAP.md`), nunca automático.
 
 ---
 
-## M1 — Leads (planejado)
+## M1.1 — Schema de Leads (implementado)
 
-Conforme `docs/PRODUCT.md` §2-3.
-
-### pipelines / pipeline_stages
-
-Pipeline configurável, não hardcoded. Estágio possui: id, nome, ordem,
-probabilidade, tipo (`OPEN` | `WON` | `LOST`), ativo.
+Conforme `docs/PRODUCT.md` §2-3. `pipeline_id`/`stage_id` ficam
+exclusivamente para o M2 — não antecipados aqui.
 
 ### lead_sources
 
-Origem do lead (configurável).
+- `id` uuid PK
+- `organization_id` uuid FK → `organizations.id`
+- `name` text, único por organização (`organization_id, name`)
+- `active` boolean, default `true` (desativar sem apagar; sem DELETE)
+- `created_at`, `updated_at` timestamptz
+- `UNIQUE (id, organization_id)`: alvo da FK composta de `leads.lead_source_id`
 
 ### leads
 
-Campos mínimos de criação: nome, telefone/WhatsApp, empresa, origem,
-responsável, observação opcional.
+- `id` uuid PK, `organization_id` uuid FK → `organizations.id`
+- `name` (obrigatório), `whatsapp`, `company`, `lead_source_id`, `owner_id`, `note`
+- `email`, `instagram`, `website`, `segment`, `city`, `state`,
+  `service_interest`, `estimated_value` (`numeric(14,2)`, nunca negativo),
+  `campaign`, `revenue_range`, `temperature` (enum `lead_temperature`:
+  `COLD`/`WARM`/`HOT`), `next_action`, `next_action_at`
+- `created_at`, `updated_at` timestamptz
 
-Campos adicionais (enriquecimento posterior): email, Instagram, site,
-segmento, cidade, estado, serviço de interesse, valor potencial, campanha,
-faixa de faturamento, temperatura, próxima ação, data da próxima ação.
+`owner_id` → FK composta `(owner_id, organization_id)` → `profiles (id,
+organization_id)`; `lead_source_id` → FK composta `(lead_source_id,
+organization_id)` → `lead_sources (id, organization_id)`. Isso torna
+impossível, no banco, um lead referenciar owner ou origem de outra
+organização — não depende só de RLS.
 
-Cada lead pertence a uma `organization` e a um estágio de `pipeline_stages`.
+Sem DELETE em nenhuma das duas tabelas (RLS sem policy de delete): leads
+nunca são excluídos, `lead_sources` se desativa via `active = false`.
 
 ---
 
