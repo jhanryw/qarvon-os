@@ -47,6 +47,14 @@ const DEFAULT_PAGE_SIZE = 20;
 // explicitamente owner_id/lead_source_id IS NULL (ex.: "Sem responsável").
 const ownerOrSourceFilterSchema = z.union([z.string().uuid(), z.literal("none")]);
 
+export const nextActionFilterSchema = z.enum([
+  "overdue",
+  "today",
+  "future",
+  "none",
+]);
+export type NextActionFilter = z.infer<typeof nextActionFilterSchema>;
+
 export const listLeadsSchema = z
   .object({
     page: z.number().int().positive().default(1),
@@ -55,8 +63,20 @@ export const listLeadsSchema = z
     ownerId: ownerOrSourceFilterSchema.optional(),
     leadSourceId: ownerOrSourceFilterSchema.optional(),
     temperature: leadTemperatureSchema.optional(),
-    hasPendingNextAction: z.boolean().optional(),
+    nextActionFilter: nextActionFilterSchema.optional(),
+    minEstimatedValue: z.number().finite().nonnegative().optional(),
+    maxEstimatedValue: z.number().finite().nonnegative().optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (value) =>
+      value.minEstimatedValue == null ||
+      value.maxEstimatedValue == null ||
+      value.maxEstimatedValue >= value.minEstimatedValue,
+    {
+      message: "Valor máximo precisa ser maior ou igual ao valor mínimo",
+      path: ["maxEstimatedValue"],
+    },
+  );
 export type ListLeadsInput = z.input<typeof listLeadsSchema>;
 export type ParsedListLeadsInput = z.output<typeof listLeadsSchema>;

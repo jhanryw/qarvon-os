@@ -69,4 +69,61 @@ describe("parseLeadListSearchParams", () => {
     const result = parseLeadListSearchParams({ search: ["a", "b"] });
     expect(result.search).toBe("a");
   });
+
+  it("nextAction válido é aceito para cada opção", () => {
+    expect(
+      parseLeadListSearchParams({ nextAction: "overdue" }).nextActionFilter,
+    ).toBe("overdue");
+    expect(
+      parseLeadListSearchParams({ nextAction: "today" }).nextActionFilter,
+    ).toBe("today");
+    expect(
+      parseLeadListSearchParams({ nextAction: "future" }).nextActionFilter,
+    ).toBe("future");
+    expect(
+      parseLeadListSearchParams({ nextAction: "none" }).nextActionFilter,
+    ).toBe("none");
+  });
+
+  it("nextAction inválido é ignorado", () => {
+    expect(
+      parseLeadListSearchParams({ nextAction: "yesterday" }).nextActionFilter,
+    ).toBeUndefined();
+  });
+
+  it("minValue/maxValue válidos são aceitos", () => {
+    const result = parseLeadListSearchParams({
+      minValue: "1000",
+      maxValue: "5000.50",
+    });
+    expect(result.minEstimatedValue).toBe(1000);
+    expect(result.maxEstimatedValue).toBe(5000.5);
+  });
+
+  it("minValue/maxValue inválidos (não numéricos ou negativos) são ignorados", () => {
+    expect(
+      parseLeadListSearchParams({ minValue: "abc" }).minEstimatedValue,
+    ).toBeUndefined();
+    expect(
+      parseLeadListSearchParams({ minValue: "-100" }).minEstimatedValue,
+    ).toBeUndefined();
+  });
+
+  it("descarta min/max quando a combinação é inválida (min > max), sem quebrar o parse", () => {
+    const result = parseLeadListSearchParams({
+      minValue: "5000",
+      maxValue: "1000",
+    });
+    expect(result.minEstimatedValue).toBeUndefined();
+    expect(result.maxEstimatedValue).toBeUndefined();
+  });
+
+  it("mantém min/max quando só um dos dois está presente", () => {
+    expect(
+      parseLeadListSearchParams({ minValue: "1000" }).minEstimatedValue,
+    ).toBe(1000);
+    expect(
+      parseLeadListSearchParams({ maxValue: "1000" }).maxEstimatedValue,
+    ).toBe(1000);
+  });
 });

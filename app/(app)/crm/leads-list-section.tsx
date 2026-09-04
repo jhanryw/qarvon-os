@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { LeadsFilterBar } from "@/app/(app)/crm/leads-filter-bar";
 import { LeadsTable } from "@/app/(app)/crm/leads-table";
@@ -30,8 +30,14 @@ export function LeadsListSection({
   total,
 }: LeadsListSectionProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [editingLeadId, setEditingLeadId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+
+  // Remonta a barra de filtros quando a query string muda por fora dela
+  // mesma (ex.: "Limpar filtros", back/forward do navegador) — os selects
+  // usam defaultValue (não controlado) e não re-sincronizariam sozinhos.
+  const filtersKey = searchParams.toString();
 
   function handleEditSuccess() {
     setEditingLeadId(null);
@@ -42,7 +48,11 @@ export function LeadsListSection({
 
   return (
     <>
-      <LeadsFilterBar leadSources={leadSources} profiles={profiles} />
+      <LeadsFilterBar
+        key={filtersKey}
+        leadSources={leadSources}
+        profiles={profiles}
+      />
 
       {leads.length === 0 ? (
         <Card>

@@ -3,12 +3,17 @@
 // seguro e independente por campo (uma page inválida não descarta um
 // search válido, e vice-versa) — em vez de rejeitar a URL inteira.
 
+export type NextActionFilter = "overdue" | "today" | "future" | "none";
+
 export interface ParsedLeadListParams {
   search?: string;
   page: number;
   ownerId?: string | "none";
   leadSourceId?: string | "none";
   temperature?: "COLD" | "WARM" | "HOT";
+  nextActionFilter?: NextActionFilter;
+  minEstimatedValue?: number;
+  maxEstimatedValue?: number;
 }
 
 export type RawSearchParams = Record<string, string | string[] | undefined>;
@@ -42,14 +47,40 @@ function parseTemperature(raw?: string): "COLD" | "WARM" | "HOT" | undefined {
   return raw === "COLD" || raw === "WARM" || raw === "HOT" ? raw : undefined;
 }
 
+function parseNextActionFilter(raw?: string): NextActionFilter | undefined {
+  return raw === "overdue" || raw === "today" || raw === "future" || raw === "none"
+    ? raw
+    : undefined;
+}
+
+function parseMoneyValue(raw?: string): number | undefined {
+  if (!raw) return undefined;
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
 export function parseLeadListSearchParams(
   raw: RawSearchParams,
 ): ParsedLeadListParams {
+  const minEstimatedValue = parseMoneyValue(getFirst(raw, "minValue"));
+  const maxEstimatedValue = parseMoneyValue(getFirst(raw, "maxValue"));
+  // Combinação inválida (min > max) não deve derrubar a página — em vez de
+  // deixar chegar ao schema mais estrito de listLeads(), já cai aqui como
+  // "sem filtro de valor", o mesmo padrão de fallback seguro dos outros
+  // campos.
+  const validRange =
+    minEstimatedValue === undefined ||
+    maxEstimatedValue === undefined ||
+    maxEstimatedValue >= minEstimatedValue;
+
   return {
     search: parseSearch(getFirst(raw, "search")),
     page: parsePage(getFirst(raw, "page")),
     ownerId: parseOwnerOrSourceFilter(getFirst(raw, "owner")),
     leadSourceId: parseOwnerOrSourceFilter(getFirst(raw, "source")),
     temperature: parseTemperature(getFirst(raw, "temperature")),
+    nextActionFilter: parseNextActionFilter(getFirst(raw, "nextAction")),
+    minEstimatedValue: validRange ? minEstimatedValue : undefined,
+    maxEstimatedValue: validRange ? maxEstimatedValue : undefined,
   };
 }

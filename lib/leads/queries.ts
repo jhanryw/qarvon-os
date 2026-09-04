@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getTenantContext } from "@/lib/auth/tenant-context";
 import { AppError } from "@/lib/errors";
 import { listLeadsSchema, type ListLeadsInput } from "@/lib/leads/schemas";
+import { computeNextActionRange } from "@/lib/leads/date-range";
 import type { Tables } from "@/types/database";
 
 export type Lead = Tables<"leads">;
@@ -104,7 +105,7 @@ export async function listLeads(
   input: ListLeadsInput = {},
 ): Promise<ListLeadsResult> {
   const parsed = listLeadsSchema.parse(input);
-  const { organizationId } = await getTenantContext();
+  const { organizationId, organization } = await getTenantContext();
   const supabase = await createClient();
 
   const { from, to } = computePageRange(parsed.page, parsed.pageSize);
@@ -136,8 +137,23 @@ export async function listLeads(
   if (parsed.temperature) {
     query = query.eq("temperature", parsed.temperature);
   }
-  if (parsed.hasPendingNextAction) {
-    query = query.not("next_action_at", "is", null);
+  if (parsed.nextActionFilter) {
+    const range = computeNextActionRange(
+      parsed.nextActionFilter,
+      organization.timezone,
+    );
+    if (range.isNull) {
+      query = query.is("next_action_at", null);
+    } else {
+      if (range.gte) query = query.gte("next_action_at", range.gte);
+      if (range.lt) query = query.lt("next_action_at", range.lt);
+    }
+  }
+  if (parsed.minEstimatedValue != null) {
+    query = query.gte("estimated_value", parsed.minEstimatedValue);
+  }
+  if (parsed.maxEstimatedValue != null) {
+    query = query.lte("estimated_value", parsed.maxEstimatedValue);
   }
 
   const { data, error, count } = await query;

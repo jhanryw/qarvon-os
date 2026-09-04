@@ -34,13 +34,22 @@ export default async function CrmPage({ searchParams }: CrmPageProps) {
       ownerId: params.ownerId,
       leadSourceId: params.leadSourceId,
       temperature: params.temperature,
+      nextActionFilter: params.nextActionFilter,
+      minEstimatedValue: params.minEstimatedValue,
+      maxEstimatedValue: params.maxEstimatedValue,
     });
   } catch (error) {
     if (!(error instanceof AppError)) throw error;
   }
 
   const hasFilters = Boolean(
-    params.search || params.ownerId || params.leadSourceId || params.temperature,
+    params.search ||
+      params.ownerId ||
+      params.leadSourceId ||
+      params.temperature ||
+      params.nextActionFilter ||
+      params.minEstimatedValue != null ||
+      params.maxEstimatedValue != null,
   );
   const total = leadsResult?.total ?? 0;
 

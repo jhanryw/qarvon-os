@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { LeadsAdditionalFilters } from "@/app/(app)/crm/leads-additional-filters";
 import type { LeadSource } from "@/lib/leads/queries";
 import type { ProfileOption } from "@/lib/profiles/queries";
 
@@ -47,6 +49,22 @@ export function LeadsFilterBar({ leadSources, profiles }: LeadsFilterBarProps) {
     debounceRef.current = setTimeout(() => {
       updateParams({ search: value.trim() || null });
     }, SEARCH_DEBOUNCE_MS);
+  }
+
+  const filterKeys = [
+    "search",
+    "owner",
+    "source",
+    "temperature",
+    "nextAction",
+    "minValue",
+    "maxValue",
+  ];
+  const hasActiveFilters = filterKeys.some((key) => searchParams.get(key));
+
+  function handleClearAll() {
+    setSearchValue("");
+    router.replace(pathname);
   }
 
   return (
@@ -102,6 +120,14 @@ export function LeadsFilterBar({ leadSources, profiles }: LeadsFilterBarProps) {
         <option value="WARM">Morno</option>
         <option value="HOT">Quente</option>
       </Select>
+
+      <LeadsAdditionalFilters />
+
+      {hasActiveFilters && (
+        <Button type="button" variant="ghost" onClick={handleClearAll}>
+          Limpar filtros
+        </Button>
+      )}
     </div>
   );
 }

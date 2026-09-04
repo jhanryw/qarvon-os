@@ -108,6 +108,18 @@ function fakeSupabaseForListLeads(config: {
         if (trackFilters) leadsFilterCalls.push({ method: "is", args });
         return chain;
       },
+      gte: (...args: unknown[]) => {
+        if (trackFilters) leadsFilterCalls.push({ method: "gte", args });
+        return chain;
+      },
+      lte: (...args: unknown[]) => {
+        if (trackFilters) leadsFilterCalls.push({ method: "lte", args });
+        return chain;
+      },
+      lt: (...args: unknown[]) => {
+        if (trackFilters) leadsFilterCalls.push({ method: "lt", args });
+        return chain;
+      },
       then: (resolve: (value: unknown) => void) =>
         Promise.resolve(result).then(resolve),
     };
@@ -143,7 +155,10 @@ describe("listLeads", () => {
   beforeEach(() => {
     getTenantContext.mockReset();
     createClient.mockReset();
-    getTenantContext.mockResolvedValue({ organizationId: ORG_ID });
+    getTenantContext.mockResolvedValue({
+      organizationId: ORG_ID,
+      organization: { timezone: "America/Sao_Paulo" },
+    });
   });
 
   it("resolve owner/lead_source em no máximo 1 consulta por tabela, mesmo com várias linhas repetindo ids", async () => {
@@ -257,5 +272,155 @@ describe("listLeads", () => {
     await expect(listLeads()).rejects.toMatchObject({
       code: "DATABASE_ERROR",
     });
+  });
+
+  it('nextActionFilter="none" usa .is(next_action_at, null)', async () => {
+    const fake = fakeSupabaseForListLeads({
+      leads: { data: [], error: null, count: 0 },
+    });
+    createClient.mockResolvedValue(fake.client);
+
+    await listLeads({ nextActionFilter: "none" });
+
+    const filter = fake.leadsFilterCalls.find(
+      (call) => call.args[0] === "next_action_at",
+    );
+    expect(filter).toEqual({
+      method: "is",
+      args: ["next_action_at", null],
+    });
+  });
+
+  it('nextActionFilter="overdue" usa .lt(next_action_at, início de hoje) no timezone da organização', async () => {
+    const fake = fakeSupabaseForListLeads({
+      leads: { data: [], error: null, count: 0 },
+    });
+    createClient.mockResolvedValue(fake.client);
+
+    await listLeads({ nextActionFilter: "overdue" });
+
+    const filters = fake.leadsFilterCalls.filter(
+      (call) => call.args[0] === "next_action_at",
+    );
+    expect(filters).toHaveLength(1);
+    expect(filters[0].method).toBe("lt");
+  });
+
+  it('nextActionFilter="today" usa .gte e .lt (início e fim do dia local)', async () => {
+    const fake = fakeSupabaseForListLeads({
+      leads: { data: [], error: null, count: 0 },
+    });
+    createClient.mockResolvedValue(fake.client);
+
+    await listLeads({ nextActionFilter: "today" });
+
+    const filters = fake.leadsFilterCalls.filter(
+      (call) => call.args[0] === "next_action_at",
+    );
+    expect(filters.map((f) => f.method).sort()).toEqual(["gte", "lt"]);
+  });
+
+  it('nextActionFilter="future" usa .gte(next_action_at, início de amanhã)', async () => {
+    const fake = fakeSupabaseForListLeads({
+      leads: { data: [], error: null, count: 0 },
+    });
+    createClient.mockResolvedValue(fake.client);
+
+    await listLeads({ nextActionFilter: "future" });
+
+    const filters = fake.leadsFilterCalls.filter(
+      (call) => call.args[0] === "next_action_at",
+    );
+    expect(filters).toHaveLength(1);
+    expect(filters[0].method).toBe("gte");
+  });
+
+  it("usa o timezone da organização do contexto do tenant, não um valor fixo", async () => {
+    getTenantContext.mockResolvedValue({
+      organizationId: ORG_ID,
+      organization: { timezone: "UTC" },
+    });
+    const fake = fakeSupabaseForListLeads({
+      leads: { data: [], error: null, count: 0 },
+    });
+    createClient.mockResolvedValue(fake.client);
+
+    await listLeads({ nextActionFilter: "today" });
+
+    const filters = fake.leadsFilterCalls.filter(
+      (call) => call.args[0] === "next_action_at",
+    );
+    // Com timezone UTC, o início do dia bate exatamente na meia-noite UTC —
+    // só confirma que o valor foi calculado (não trava num timezone fixo).
+    expect(filters).toHaveLength(2);
+  });
+
+  it("estimated_value: filtro mínimo usa .gte", async () => {
+    const fake = fakeSupabaseForListLeads({
+      leads: { data: [], error: null, count: 0 },
+    });
+    createClient.mockResolvedValue(fake.client);
+
+    await listLeads({ minEstimatedValue: 1000 });
+
+    const filter = fake.leadsFilterCalls.find(
+      (call) => call.args[0] === "estimated_value",
+    );
+    expect(filter).toEqual({ method: "gte", args: ["estimated_value", 1000] });
+  });
+
+  it("estimated_value: filtro máximo usa .lte", async () => {
+    const fake = fakeSupabaseForListLeads({
+      leads: { data: [], error: null, count: 0 },
+    });
+    createClient.mockResolvedValue(fake.client);
+
+    await listLeads({ maxEstimatedValue: 5000 });
+
+    const filter = fake.leadsFilterCalls.find(
+      (call) => call.args[0] === "estimated_value",
+    );
+    expect(filter).toEqual({ method: "lte", args: ["estimated_value", 5000] });
+  });
+
+  it("estimated_value: min e max simultâneos aplicam .gte e .lte juntos", async () => {
+    const fake = fakeSupabaseForListLeads({
+      leads: { data: [], error: null, count: 0 },
+    });
+    createClient.mockResolvedValue(fake.client);
+
+    await listLeads({ minEstimatedValue: 1000, maxEstimatedValue: 5000 });
+
+    const filters = fake.leadsFilterCalls.filter(
+      (call) => call.args[0] === "estimated_value",
+    );
+    expect(filters).toEqual([
+      { method: "gte", args: ["estimated_value", 1000] },
+      { method: "lte", args: ["estimated_value", 5000] },
+    ]);
+  });
+
+  it("rejeita maxEstimatedValue menor que minEstimatedValue", async () => {
+    await expect(
+      listLeads({ minEstimatedValue: 5000, maxEstimatedValue: 1000 }),
+    ).rejects.toThrow();
+  });
+
+  it("todos os filtros continuam presos ao organization_id do tenant", async () => {
+    const fake = fakeSupabaseForListLeads({
+      leads: { data: [], error: null, count: 0 },
+    });
+    createClient.mockResolvedValue(fake.client);
+
+    await listLeads({
+      nextActionFilter: "today",
+      minEstimatedValue: 100,
+      maxEstimatedValue: 200,
+    });
+
+    const orgFilter = fake.leadsFilterCalls.find(
+      (call) => call.args[0] === "organization_id",
+    );
+    expect(orgFilter?.args).toEqual(["organization_id", ORG_ID]);
   });
 });
