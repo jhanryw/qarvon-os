@@ -64,6 +64,22 @@ describe("createLeadSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  it("aceita revenueRange como um dos códigos estáveis", () => {
+    const result = createLeadSchema.safeParse({
+      name: "Lead Teste",
+      revenueRange: "100k_500k",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejeita revenueRange fora dos códigos estáveis (ex.: label em texto livre)", () => {
+    const result = createLeadSchema.safeParse({
+      name: "Lead Teste",
+      revenueRange: "R$100 mil a R$500 mil/mês",
+    });
+    expect(result.success).toBe(false);
+  });
+
   it("rejeita nextActionAt inválida", () => {
     const result = createLeadSchema.safeParse({
       name: "Lead Teste",

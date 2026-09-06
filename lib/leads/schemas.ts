@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { revenueRangeCodeSchema } from "@/lib/leads/revenue-range";
 
 export const leadTemperatureSchema = z.enum(["COLD", "WARM", "HOT"]);
 
@@ -22,7 +23,7 @@ const leadFields = {
   serviceInterest: z.string().trim().min(1).optional().nullable(),
   estimatedValue: z.number().finite().nonnegative().optional().nullable(),
   campaign: z.string().trim().min(1).optional().nullable(),
-  revenueRange: z.string().trim().min(1).optional().nullable(),
+  revenueRange: revenueRangeCodeSchema.optional().nullable(),
   temperature: leadTemperatureSchema.optional().nullable(),
   nextAction: z.string().trim().min(1).optional().nullable(),
   nextActionAt: z
