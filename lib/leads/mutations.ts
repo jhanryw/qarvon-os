@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { getTenantContext } from "@/lib/auth/tenant-context";
-import { AppError } from "@/lib/errors";
+import { AppError, mapQarvonError } from "@/lib/errors";
 import { createLeadSchema, updateLeadSchema } from "@/lib/leads/schemas";
 import {
   normalizeEmail,
@@ -11,7 +11,7 @@ import {
   normalizeWhatsapp,
 } from "@/lib/leads/normalize";
 import type { Lead } from "@/lib/leads/queries";
-import type { TablesInsert, TablesUpdate } from "@/types/database";
+import type { TablesUpdate } from "@/types/database";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -125,27 +125,30 @@ function mapInsertError(error: { code?: string; message: string }): AppError {
   return new AppError("DATABASE_ERROR", "Falha ao salvar lead.", error);
 }
 
+// Cria o lead via create_lead_with_pipeline (RPC transacional, M2.2A) em
+// vez de INSERT direto: fecha uma lacuna real entre o que o banco já
+// resolve (pipeline default + primeira stage OPEN + evento de bootstrap em
+// lead_stage_history) e o que o caminho humano usava até aqui — leads
+// criados pelo formulário do CRM ficavam com pipeline_id/stage_id NULL,
+// impossíveis de aparecer no Kanban. A RPC também revalida owner/source/
+// duplicidade de WhatsApp internamente (mesmas regras de negócio, agora
+// como fronteira de segurança de verdade, não só neste arquivo).
+//
+// getTenantContext() continua chamado (mesmo sem usar organizationId no
+// payload — a RPC resolve isso sozinha via auth.uid()): é o único ponto
+// que distingue "sem sessão" (UNAUTHENTICATED -> /login) de "sessão sem
+// profile válido" (NO_ACCESS -> /sem-acesso); sem ele, os dois casos
+// colapsariam no mesmo QARVON_NO_ACCESS genérico da RPC.
 export async function createLead(input: unknown): Promise<Lead> {
   const parsed = createLeadSchema.parse(input);
-  const { organizationId } = await getTenantContext();
+  await getTenantContext();
   const supabase = await createClient();
 
   const whatsapp = parsed.whatsapp
     ? normalizeWhatsapp(parsed.whatsapp)
     : null;
 
-  if (parsed.ownerId) {
-    await assertOwnerBelongsToOrganization(supabase, organizationId, parsed.ownerId);
-  }
-  if (parsed.leadSourceId) {
-    await assertLeadSourceUsable(supabase, organizationId, parsed.leadSourceId);
-  }
-  if (whatsapp) {
-    await assertWhatsappNotDuplicated(supabase, organizationId, whatsapp);
-  }
-
-  const payload: TablesInsert<"leads"> = {
-    organization_id: organizationId,
+  const payload = {
     name: parsed.name,
     whatsapp,
     company: parsed.company ?? null,
@@ -172,14 +175,12 @@ export async function createLead(input: unknown): Promise<Lead> {
       : null,
   };
 
-  const { data, error } = await supabase
-    .from("leads")
-    .insert(payload)
-    .select("*")
-    .single();
+  const { data, error } = await supabase.rpc("create_lead_with_pipeline", {
+    p_lead: payload,
+  });
 
   if (error) {
-    throw mapInsertError(error);
+    throw mapQarvonError(error, "Falha ao salvar lead.");
   }
   return data;
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
+import { AppError } from "@/lib/errors";
 
 const { getTenantContext } = vi.hoisted(() => ({ getTenantContext: vi.fn() }));
 vi.mock("@/lib/auth/tenant-context", () => ({ getTenantContext }));
@@ -16,11 +17,12 @@ type FakeResponse = { data: unknown; error: unknown };
 // em que o código sob teste as invoca. insert()/update() gravam o payload
 // recebido em `calls`, para verificar o que o código realmente enviou (não
 // só o que o fake decide devolver).
-function fakeSupabase(responses: FakeResponse[]) {
+function fakeSupabase(responses: FakeResponse[], rpcResponse?: FakeResponse) {
   let cursor = 0;
-  const calls: { insert: unknown[]; update: unknown[] } = {
+  const calls: { insert: unknown[]; update: unknown[]; rpc: unknown[] } = {
     insert: [],
     update: [],
+    rpc: [],
   };
   const next = () => {
     const response = responses[cursor];
@@ -43,7 +45,11 @@ function fakeSupabase(responses: FakeResponse[]) {
     maybeSingle: next,
     single: next,
   };
-  return { client: { from: () => chain }, calls };
+  const rpc = (fn: string, args: unknown) => {
+    calls.rpc.push({ fn, args });
+    return Promise.resolve(rpcResponse ?? { data: null, error: null });
+  };
+  return { client: { from: () => chain, rpc }, calls };
 }
 
 const TENANT = { organizationId: "org-1" };
@@ -57,25 +63,42 @@ beforeEach(() => {
   getTenantContext.mockResolvedValue(TENANT);
 });
 
+// createLead delega inteiramente a create_lead_with_pipeline (RPC) — owner/
+// source/duplicidade de WhatsApp são revalidados DENTRO da RPC agora, não
+// mais por queries separadas deste arquivo. Os testes simulam a resposta
+// da RPC (sucesso ou marcador QARVON_*), não mais uma sequência de
+// SELECTs.
 describe("createLead", () => {
-  it("cria um lead válido sem owner/source/whatsapp", async () => {
-    const fake = fakeSupabase([
-      { data: { id: LEAD_ID, name: "Lead Teste" }, error: null }, // insert
-    ]);
+  it("cria um lead válido sem owner/source/whatsapp, chamando create_lead_with_pipeline", async () => {
+    const fake = fakeSupabase([], {
+      data: { id: LEAD_ID, name: "Lead Teste" },
+      error: null,
+    });
     createClient.mockResolvedValue(fake.client);
 
     const result = await createLead({ name: "Lead Teste" });
     expect(result).toEqual({ id: LEAD_ID, name: "Lead Teste" });
-    expect(fake.calls.insert[0]).toMatchObject({
-      organization_id: "org-1",
-      name: "Lead Teste",
+    expect(fake.calls.rpc[0]).toMatchObject({
+      fn: "create_lead_with_pipeline",
+      args: { p_lead: { name: "Lead Teste" } },
     });
   });
 
-  it("rejeita owner de outra organização", async () => {
-    const fake = fakeSupabase([
-      { data: null, error: null }, // owner check: não encontrado no tenant
-    ]);
+  it("ainda distingue sessão ausente (UNAUTHENTICATED) de sessão sem acesso (NO_ACCESS) via getTenantContext", async () => {
+    getTenantContext.mockRejectedValueOnce(
+      new AppError("UNAUTHENTICATED", "Sessão não autenticada."),
+    );
+
+    await expect(createLead({ name: "Lead Teste" })).rejects.toMatchObject({
+      code: "UNAUTHENTICATED",
+    });
+  });
+
+  it("rejeita owner de outra organização (QARVON_INVALID_OWNER)", async () => {
+    const fake = fakeSupabase([], {
+      data: null,
+      error: { message: "QARVON_INVALID_OWNER" },
+    });
     createClient.mockResolvedValue(fake.client);
 
     await expect(
@@ -83,10 +106,11 @@ describe("createLead", () => {
     ).rejects.toMatchObject({ code: "INVALID_OWNER" });
   });
 
-  it("rejeita lead_source de outra organização", async () => {
-    const fake = fakeSupabase([
-      { data: null, error: null }, // source check: não encontrada no tenant
-    ]);
+  it("rejeita lead_source inválida/inativa (QARVON_INVALID_LEAD_SOURCE)", async () => {
+    const fake = fakeSupabase([], {
+      data: null,
+      error: { message: "QARVON_INVALID_LEAD_SOURCE" },
+    });
     createClient.mockResolvedValue(fake.client);
 
     await expect(
@@ -94,21 +118,11 @@ describe("createLead", () => {
     ).rejects.toMatchObject({ code: "INVALID_LEAD_SOURCE" });
   });
 
-  it("rejeita lead_source inativa para lead novo", async () => {
-    const fake = fakeSupabase([
-      { data: { id: VALID_SOURCE_ID, active: false }, error: null },
-    ]);
-    createClient.mockResolvedValue(fake.client);
-
-    await expect(
-      createLead({ name: "Lead Teste", leadSourceId: VALID_SOURCE_ID }),
-    ).rejects.toMatchObject({ code: "INVALID_LEAD_SOURCE" });
-  });
-
-  it("identifica WhatsApp duplicado no mesmo tenant", async () => {
-    const fake = fakeSupabase([
-      { data: { id: "outro-lead" }, error: null }, // duplicate check: já existe
-    ]);
+  it("identifica WhatsApp duplicado no mesmo tenant (QARVON_DUPLICATE_WHATSAPP)", async () => {
+    const fake = fakeSupabase([], {
+      data: null,
+      error: { message: "QARVON_DUPLICATE_WHATSAPP" },
+    });
     createClient.mockResolvedValue(fake.client);
 
     await expect(
@@ -117,11 +131,10 @@ describe("createLead", () => {
   });
 
   it("permite criar quando owner e source são válidos e ativos", async () => {
-    const fake = fakeSupabase([
-      { data: { id: VALID_OWNER_ID }, error: null }, // owner ok
-      { data: { id: VALID_SOURCE_ID, active: true }, error: null }, // source ok
-      { data: { id: LEAD_ID, name: "Lead Teste" }, error: null }, // insert
-    ]);
+    const fake = fakeSupabase([], {
+      data: { id: LEAD_ID, name: "Lead Teste" },
+      error: null,
+    });
     createClient.mockResolvedValue(fake.client);
 
     const result = await createLead({
@@ -130,12 +143,33 @@ describe("createLead", () => {
       leadSourceId: VALID_SOURCE_ID,
     });
     expect(result).toMatchObject({ id: LEAD_ID });
+    expect(fake.calls.rpc[0]).toMatchObject({
+      args: {
+        p_lead: {
+          owner_id: VALID_OWNER_ID,
+          lead_source_id: VALID_SOURCE_ID,
+        },
+      },
+    });
+  });
+
+  it("sem pipeline default configurado, mapeia para NO_DEFAULT_PIPELINE", async () => {
+    const fake = fakeSupabase([], {
+      data: null,
+      error: { message: "QARVON_NO_DEFAULT_PIPELINE" },
+    });
+    createClient.mockResolvedValue(fake.client);
+
+    await expect(createLead({ name: "Lead Teste" })).rejects.toMatchObject({
+      code: "NO_DEFAULT_PIPELINE",
+    });
   });
 
   it("propaga erro real de banco como DATABASE_ERROR, sem mascarar", async () => {
-    const fake = fakeSupabase([
-      { data: null, error: { message: "connection refused" } }, // insert falha
-    ]);
+    const fake = fakeSupabase([], {
+      data: null,
+      error: { message: "connection refused" },
+    });
     createClient.mockResolvedValue(fake.client);
 
     await expect(createLead({ name: "Lead Teste" })).rejects.toMatchObject({

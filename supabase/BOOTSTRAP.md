@@ -94,3 +94,37 @@ Rotação: repetir os passos 1-2 com um token novo, depois
 `update public.integration_credentials set token_hash = '<novo hash>' where slug = 'lp-qarvon'`,
 e atualizar o secret do lado da LP. Desativar uma credencial comprometida
 sem rotacionar: `update public.integration_credentials set active = false where slug = '...'`.
+
+## META_TOKEN_ENCRYPTION_KEY (chave de cifragem do token da Meta CAPI)
+
+Diferente do pepper de `integration_credentials` (que só precisa comparar
+um hash), o access token da Meta Conversions API precisa ser recuperado em
+texto puro para autenticar a chamada HTTP — por isso ele é **cifrado**
+(pgcrypto `pgp_sym_encrypt`/`pgp_sym_decrypt`), não hasheado, em
+`meta_integration_secrets.access_token_encrypted`. `META_TOKEN_ENCRYPTION_KEY`
+é a chave dessa cifragem — nunca fica no banco, só no ambiente do Qarvon OS.
+
+1. Gerar uma vez, antes do primeiro uso da tela Configurações > Integrações
+   > Meta Ads:
+
+   ```bash
+   openssl rand -base64 32
+   ```
+
+2. Definir como `META_TOKEN_ENCRYPTION_KEY` no ambiente do Qarvon OS (nunca
+   no client, nunca com prefixo `NEXT_PUBLIC_`).
+
+3. A partir daí, salvar um token pela UI (upsert_meta_integration) cifra
+   automaticamente com essa chave; o disparo real da conversão
+   (dispatchWonConversion/retry) decifra com a mesma chave via
+   `get_meta_access_token` (service_role only).
+
+**Importante — trocar a chave não é uma rotação simples**: como o token já
+salvo foi cifrado com a chave ANTERIOR, trocar `META_TOKEN_ENCRYPTION_KEY`
+sem reprocessar os dados torna qualquer token já salvo indecifrável
+(`pgp_sym_decrypt` falha alto com "Wrong key or corrupt data", nunca decifra
+errado silenciosamente — ver testes de
+`lib/integrations/meta/dispatch.test.ts`). Para trocar a chave depois de já
+existirem tokens salvos: decifrar com a chave antiga, salvar de novo pela UI
+(que cifra com a nova) antes de remover a chave antiga do ambiente — não
+implementado como procedimento automatizado nesta entrega.

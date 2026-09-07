@@ -6,6 +6,7 @@ import { parseLeadListSearchParams } from "@/lib/leads/search-params";
 import { AppError } from "@/lib/errors";
 import { NewLeadButton } from "@/app/(app)/crm/new-lead-button";
 import { LeadsListSection } from "@/app/(app)/crm/leads-list-section";
+import { CrmSubnav } from "@/app/(app)/crm/crm-subnav";
 import type { ListLeadsResult } from "@/lib/leads/queries";
 
 const PAGE_SIZE = 20;
@@ -55,6 +56,7 @@ export default async function CrmPage({ searchParams }: CrmPageProps) {
 
   return (
     <div>
+      <CrmSubnav active="leads" />
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold text-neutral-900">CRM</h1>

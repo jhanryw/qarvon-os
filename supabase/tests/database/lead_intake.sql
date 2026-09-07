@@ -23,6 +23,13 @@ select plan(51);
 
 create temporary table test_scratch (key text primary key, value text);
 
+-- Este arquivo não troca de role hoje (create_lead_from_integration nunca
+-- usa auth.uid()/sessão), mas o GRANT abaixo é adicionado por consistência
+-- e segurança futura — ver o achado real documentado em pipeline_rpc.sql:
+-- tabela TEMPORARY fica fora do "schema public", os GRANTs de bootstrap
+-- nunca a alcançam.
+grant all on test_scratch to authenticated, anon, service_role;
+
 insert into public.organizations (id, name) values
   ('00000000-0000-0000-0000-000000000010', 'Org G (integração)'),
   ('00000000-0000-0000-0000-000000000011', 'Org H (integração, outro tenant)');
@@ -410,6 +417,7 @@ select throws_ok(
        '60000000-0000-4000-8000-000000000002', 'sub-inativa', '{"name":"x","whatsapp":"11999999999"}'::jsonb, '{}'::jsonb, '{}'::jsonb
      ) $$,
   'QV001',
+  'QARVON_INVALID_CREDENTIAL',
   'credencial inativa: QARVON_INVALID_CREDENTIAL'
 );
 select throws_ok(
@@ -417,6 +425,7 @@ select throws_ok(
        '60000000-0000-4000-8000-000000000099', 'sub-inexistente', '{"name":"x","whatsapp":"11999999999"}'::jsonb, '{}'::jsonb, '{}'::jsonb
      ) $$,
   'QV001',
+  'QARVON_INVALID_CREDENTIAL',
   'credencial inexistente: QARVON_INVALID_CREDENTIAL'
 );
 select throws_ok(
@@ -424,6 +433,7 @@ select throws_ok(
        '60000000-0000-4000-8000-000000000001', '', '{"name":"x","whatsapp":"11999999999"}'::jsonb, '{}'::jsonb, '{}'::jsonb
      ) $$,
   'QV001',
+  'QARVON_INVALID_INPUT',
   'external_submission_id vazio: QARVON_INVALID_INPUT'
 );
 select throws_ok(
@@ -431,6 +441,7 @@ select throws_ok(
        '60000000-0000-4000-8000-000000000001', null, '{"name":"x","whatsapp":"11999999999"}'::jsonb, '{}'::jsonb, '{}'::jsonb
      ) $$,
   'QV001',
+  'QARVON_INVALID_INPUT',
   'external_submission_id nulo: QARVON_INVALID_INPUT'
 );
 select throws_ok(
@@ -438,6 +449,7 @@ select throws_ok(
        '60000000-0000-4000-8000-000000000001', 'sub-chave-errada', '{"name":"x","whatsapp":"11999999999","foo":"bar"}'::jsonb, '{}'::jsonb, '{}'::jsonb
      ) $$,
   'QV001',
+  'QARVON_INVALID_INPUT',
   'chave desconhecida no payload (foo): QARVON_INVALID_INPUT'
 );
 select throws_ok(
@@ -445,6 +457,7 @@ select throws_ok(
        '60000000-0000-4000-8000-000000000001', 'sub-whatsapp-invalido', '{"name":"x","whatsapp":"123"}'::jsonb, '{}'::jsonb, '{}'::jsonb
      ) $$,
   'QV001',
+  'QARVON_INVALID_WHATSAPP',
   'WhatsApp em formato irreconhecível: QARVON_INVALID_WHATSAPP'
 );
 

@@ -17,6 +17,15 @@ select plan(49);
 
 create temporary table test_scratch (key text primary key, value text);
 
+-- Achado real ao rodar contra Postgres de verdade (não capturado por
+-- revisão estática): tabela TEMPORARY vive em pg_temp, fora do "schema
+-- public" — os GRANTs de bootstrap nunca a alcançam. Sem este GRANT
+-- explícito, todo "set local role authenticated" abaixo falharia com
+-- "permission denied for table test_scratch", mesmo para quem a criou
+-- (SET ROLE troca o papel usado na checagem de permissão, não a posse
+-- do objeto).
+grant all on test_scratch to authenticated, anon, service_role;
+
 insert into public.organizations (id, name) values
   ('00000000-0000-0000-0000-000000000001', 'Org A'),
   ('00000000-0000-0000-0000-000000000002', 'Org B'),
@@ -104,6 +113,7 @@ set local request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000c1';
 select throws_ok(
   $$ select public.move_lead_to_stage('30000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000002') $$,
   'QV001',
+  'QARVON_NO_ACCESS',
   'usuário sem profile: QARVON_NO_ACCESS'
 );
 
@@ -114,6 +124,7 @@ set local request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000d1';
 select throws_ok(
   $$ select public.move_lead_to_stage('30000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000002') $$,
   'QV001',
+  'QARVON_NO_ACCESS',
   'profile inativo: QARVON_NO_ACCESS'
 );
 
@@ -128,12 +139,14 @@ set local request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
 select throws_ok(
   $$ select public.move_lead_to_stage('30000000-0000-4000-8000-000000000011', '20000000-0000-4000-8000-000000000002') $$,
   'QV001',
+  'QARVON_LEAD_NOT_FOUND',
   'lead de outro tenant: QARVON_LEAD_NOT_FOUND (cross-tenant indistinguível de inexistente)'
 );
 
 select throws_ok(
   $$ select public.move_lead_to_stage('30000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000011') $$,
   'QV001',
+  'QARVON_STAGE_NOT_FOUND',
   'stage de outro tenant: QARVON_STAGE_NOT_FOUND'
 );
 
@@ -229,6 +242,7 @@ select is(
 select throws_ok(
   $$ select public.move_lead_to_stage('30000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000004') $$,
   'QV001',
+  'QARVON_STAGE_INACTIVE',
   'stage inativa: QARVON_STAGE_INACTIVE'
 );
 
@@ -236,6 +250,7 @@ select throws_ok(
 select throws_ok(
   $$ select public.move_lead_to_stage('30000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000021') $$,
   'QV001',
+  'QARVON_PIPELINE_INACTIVE',
   'pipeline de destino inativa: QARVON_PIPELINE_INACTIVE'
 );
 
@@ -243,6 +258,7 @@ select throws_ok(
 select throws_ok(
   $$ select public.move_lead_to_stage('30000000-0000-4000-8000-000000000002', '20000000-0000-4000-8000-000000000001') $$,
   'QV001',
+  'QARVON_INVARIANT_VIOLATION',
   'lead com pipeline_id/stage_id parcialmente nulo: QARVON_INVARIANT_VIOLATION, não bootstrap'
 );
 
@@ -265,6 +281,7 @@ select is(
 select throws_ok(
   $$ select public.move_lead_to_stage('30000000-0000-4000-8000-000000000001', '99999999-9999-4999-8999-999999999999') $$,
   'QV001',
+  'QARVON_STAGE_NOT_FOUND',
   'stage inexistente: QARVON_STAGE_NOT_FOUND'
 );
 
@@ -321,37 +338,44 @@ select is(
 select throws_ok(
   $$ select public.create_lead_with_pipeline('{"name": "x", "foo": "bar"}'::jsonb) $$,
   'QV001',
+  'QARVON_INVALID_INPUT',
   'chave desconhecida no payload: QARVON_INVALID_INPUT'
 );
 select throws_ok(
   $$ select public.create_lead_with_pipeline('{"name": "x", "organization_id": "00000000-0000-0000-0000-000000000002"}'::jsonb) $$,
   'QV001',
+  'QARVON_INVALID_INPUT',
   'organization_id no payload: QARVON_INVALID_INPUT'
 );
 select throws_ok(
   $$ select public.create_lead_with_pipeline('{"name": "x", "pipeline_id": "10000000-0000-4000-8000-000000000002"}'::jsonb) $$,
   'QV001',
+  'QARVON_INVALID_INPUT',
   'pipeline_id no payload: QARVON_INVALID_INPUT'
 );
 
 select throws_ok(
   $$ select public.create_lead_with_pipeline('{"name": "x", "owner_id": "00000000-0000-0000-0000-0000000000b1"}'::jsonb) $$,
   'QV001',
+  'QARVON_INVALID_OWNER',
   'owner de outro tenant: QARVON_INVALID_OWNER'
 );
 select throws_ok(
   $$ select public.create_lead_with_pipeline('{"name": "x", "lead_source_id": "50000000-0000-4000-8000-000000000011"}'::jsonb) $$,
   'QV001',
+  'QARVON_INVALID_LEAD_SOURCE',
   'source de outro tenant: QARVON_INVALID_LEAD_SOURCE'
 );
 select throws_ok(
   $$ select public.create_lead_with_pipeline('{"name": "x", "lead_source_id": "50000000-0000-4000-8000-000000000002"}'::jsonb) $$,
   'QV001',
+  'QARVON_INVALID_LEAD_SOURCE',
   'source inativa: QARVON_INVALID_LEAD_SOURCE'
 );
 select throws_ok(
   $$ select public.create_lead_with_pipeline('{"name": "x", "whatsapp": "5511999999999"}'::jsonb) $$,
   'QV001',
+  'QARVON_DUPLICATE_WHATSAPP',
   'WhatsApp já usado por outro lead do mesmo tenant: QARVON_DUPLICATE_WHATSAPP'
 );
 
@@ -368,6 +392,7 @@ set local request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000e1';
 select throws_ok(
   $$ select public.create_lead_with_pipeline('{"name": "x"}'::jsonb) $$,
   'QV001',
+  'QARVON_NO_DEFAULT_PIPELINE',
   'organização sem pipeline default: QARVON_NO_DEFAULT_PIPELINE'
 );
 reset role;
@@ -383,6 +408,7 @@ set local request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000f1';
 select throws_ok(
   $$ select public.create_lead_with_pipeline('{"name": "x"}'::jsonb) $$,
   'QV001',
+  'QARVON_NO_DEFAULT_PIPELINE',
   'pipeline default sem stage OPEN ativa: QARVON_NO_DEFAULT_PIPELINE'
 );
 reset role;
@@ -400,10 +426,18 @@ select is(
 set local role authenticated;
 set local request.jwt.claim.sub = '00000000-0000-0000-0000-0000000000a1';
 
+-- Forma de 4 argumentos (errcode + errmsg exata + description), não a de 3
+-- — achado real rodando contra Postgres: como '42501' tem exatamente 5
+-- bytes, a sobrecarga throws_ok(text,text,text) o interpreta como errcode
+-- e trata o terceiro argumento como MENSAGEM esperada (comparação exata
+-- contra SQLERRM), não como descrição — com só 3 argumentos, o texto longo
+-- abaixo nunca bateria com a mensagem real do Postgres, e o teste falharia
+-- sempre. A forma de 4 argumentos é a única sobrecarga sem essa ambiguidade.
 select throws_ok(
   $$ insert into public.lead_stage_history (organization_id, lead_id, to_pipeline_id, to_stage_id, to_position)
      values ('00000000-0000-0000-0000-000000000001', '30000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000001', 1) $$,
   '42501',
+  'new row violates row-level security policy for table "lead_stage_history"',
   'INSERT direto em lead_stage_history continua bloqueado para authenticated'
 );
 
@@ -429,6 +463,7 @@ select is(
 select throws_ok(
   $$ select public.raise_qarvon_error('QARVON_TEST') $$,
   '42501',
+  'permission denied for function raise_qarvon_error',
   'authenticated não consegue chamar raise_qarvon_error diretamente (helper interno, não é endpoint)'
 );
 

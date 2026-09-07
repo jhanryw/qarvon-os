@@ -4,7 +4,11 @@ import { Button } from "@/components/ui/button";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard" },
-  { href: "/crm", label: "CRM" },
+  // Kanban (Pipeline) é a entrada principal de CRM — era inacessível pelo
+  // sidebar até aqui. A lista de leads (antigo /crm) continua existindo,
+  // alcançável pela sub-navegação Pipeline/Leads dentro da própria área.
+  { href: "/crm/pipeline", label: "CRM" },
+  { href: "/configuracoes/pipeline", label: "Configurações" },
   { href: "/financeiro", label: "Financeiro" },
 ];
 

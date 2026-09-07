@@ -118,12 +118,14 @@ select is(
 select throws_ok(
   $$ insert into public.pipelines (organization_id, name) values ('00000000-0000-0000-0000-000000000002', 'Pipeline Forjado') $$,
   '42501',
+  'new row violates row-level security policy for table "pipelines"',
   'User A não consegue inserir pipeline com organization_id de outra organização'
 );
 
 select throws_ok(
   $$ update public.pipelines set organization_id = '00000000-0000-0000-0000-000000000002' where id = '10000000-0000-4000-8000-000000000001' $$,
   '42501',
+  'new row violates row-level security policy for table "pipelines"',
   'User A não consegue mover o próprio pipeline para outra organização'
 );
 
@@ -157,6 +159,7 @@ select lives_ok(
 select throws_ok(
   $$ insert into public.pipelines (organization_id, name, is_default) values ('00000000-0000-0000-0000-000000000001', 'Segundo Default', true) $$,
   '23505',
+  'duplicate key value violates unique constraint "pipelines_one_default_per_organization"',
   'no máximo um pipeline default ativo por organização (índice único parcial)'
 );
 
@@ -170,6 +173,7 @@ select throws_ok(
   $$ insert into public.pipeline_stages (organization_id, pipeline_id, name, position, probability, stage_type)
      values ('00000000-0000-0000-0000-000000000001', '10000000-0000-4000-8000-000000000001', 'Inválida', 0, 5, 'OPEN') $$,
   '23514',
+  'new row for relation "pipeline_stages" violates check constraint "pipeline_stages_position_positive"',
   'position deve ser positiva'
 );
 
@@ -177,6 +181,7 @@ select throws_ok(
   $$ insert into public.pipeline_stages (organization_id, pipeline_id, name, position, probability, stage_type)
      values ('00000000-0000-0000-0000-000000000001', '10000000-0000-4000-8000-000000000001', 'Inválida', 4, 150, 'OPEN') $$,
   '23514',
+  'new row for relation "pipeline_stages" violates check constraint "pipeline_stages_probability_range"',
   'probability deve estar entre 0 e 100'
 );
 
@@ -184,6 +189,7 @@ select throws_ok(
   $$ insert into public.pipeline_stages (organization_id, pipeline_id, name, position, probability, stage_type)
      values ('00000000-0000-0000-0000-000000000001', '10000000-0000-4000-8000-000000000001', 'Fechado Errado', 4, 50, 'WON') $$,
   '23514',
+  'new row for relation "pipeline_stages" violates check constraint "pipeline_stages_won_probability_100"',
   'stage WON exige probability = 100'
 );
 
@@ -191,6 +197,7 @@ select throws_ok(
   $$ insert into public.pipeline_stages (organization_id, pipeline_id, name, position, probability, stage_type)
      values ('00000000-0000-0000-0000-000000000001', '10000000-0000-4000-8000-000000000001', 'Perdido Errado', 4, 50, 'LOST') $$,
   '23514',
+  'new row for relation "pipeline_stages" violates check constraint "pipeline_stages_lost_probability_0"',
   'stage LOST exige probability = 0'
 );
 
@@ -198,6 +205,7 @@ select throws_ok(
   $$ insert into public.pipeline_stages (organization_id, pipeline_id, name, position, probability, stage_type)
      values ('00000000-0000-0000-0000-000000000001', '10000000-0000-4000-8000-000000000001', 'Segundo Fechado', 4, 100, 'WON') $$,
   '23505',
+  'duplicate key value violates unique constraint "pipeline_stages_one_won_per_pipeline"',
   'no máximo uma stage WON ativa por pipeline'
 );
 
@@ -205,18 +213,21 @@ select throws_ok(
   $$ insert into public.pipeline_stages (organization_id, pipeline_id, name, position, probability, stage_type)
      values ('00000000-0000-0000-0000-000000000001', '10000000-0000-4000-8000-000000000001', 'Segundo Perdido', 4, 0, 'LOST') $$,
   '23505',
+  'duplicate key value violates unique constraint "pipeline_stages_one_lost_per_pipeline"',
   'no máximo uma stage LOST ativa por pipeline'
 );
 
 select throws_ok(
   $$ update public.pipeline_stages set pipeline_id = '10000000-0000-4000-8000-000000000002' where id = '20000000-0000-4000-8000-000000000001' $$,
   'P0001',
+  'pipeline_stages.pipeline_id não pode ser alterado após a criação',
   'pipeline_id não pode ser alterado após a criação'
 );
 
 select throws_ok(
   $$ update public.pipeline_stages set stage_type = 'WON' where id = '20000000-0000-4000-8000-000000000001' $$,
   'P0001',
+  'pipeline_stages.stage_type não pode ser alterado após a criação',
   'stage_type não pode ser alterado após a criação'
 );
 
@@ -231,6 +242,7 @@ select throws_ok(
   $$ insert into public.pipeline_stages (organization_id, pipeline_id, name, position, probability, stage_type)
      values ('00000000-0000-0000-0000-000000000001', '10000000-0000-4000-8000-000000000001', 'Posição Duplicada', 1, 5, 'OPEN') $$,
   '23505',
+  'duplicate key value violates unique constraint "pipeline_stages_pipeline_position_key"',
   'position é única por pipeline (constraint deferrable checada imediatamente)'
 );
 
@@ -241,12 +253,14 @@ select throws_ok(
 select throws_ok(
   $$ update public.leads set stage_id = '20000000-0000-4000-8000-000000000011' where id = '30000000-0000-4000-8000-000000000001' $$,
   '23503',
+  'insert or update on table "leads" violates foreign key constraint "leads_stage_same_pipeline"',
   'stage de outro pipeline não pode ser associada a um lead (pipeline_id/stage_id inconsistentes)'
 );
 
 select throws_ok(
   $$ update public.leads set pipeline_id = '10000000-0000-4000-8000-000000000002', stage_id = '20000000-0000-4000-8000-000000000011' where id = '30000000-0000-4000-8000-000000000001' $$,
   '23503',
+  'insert or update on table "leads" violates foreign key constraint "leads_pipeline_same_organization"',
   'pipeline de outra organização não pode ser associado a um lead'
 );
 
@@ -275,6 +289,7 @@ select throws_ok(
   $$ insert into public.lead_stage_history (organization_id, lead_id, from_pipeline_id, from_stage_id, from_position, to_pipeline_id, to_stage_id, to_position)
      values ('00000000-0000-0000-0000-000000000001', '30000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001', null, null, '10000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000001', 1) $$,
   '23514',
+  'new row for relation "lead_stage_history" violates check constraint "lead_stage_history_from_all_or_nothing"',
   'combinação parcial de from_* é rejeitada'
 );
 
@@ -282,6 +297,7 @@ select throws_ok(
   $$ insert into public.lead_stage_history (organization_id, lead_id, from_pipeline_id, from_stage_id, from_position, to_pipeline_id, to_stage_id, to_position)
      values ('00000000-0000-0000-0000-000000000001', '30000000-0000-4000-8000-000000000001', null, null, null, '10000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000001', 0) $$,
   '23514',
+  'new row for relation "lead_stage_history" violates check constraint "lead_stage_history_to_position_positive"',
   'to_position deve ser positiva'
 );
 
@@ -289,6 +305,7 @@ select throws_ok(
   $$ insert into public.lead_stage_history (organization_id, lead_id, from_pipeline_id, from_stage_id, from_position, to_pipeline_id, to_stage_id, to_position)
      values ('00000000-0000-0000-0000-000000000001', '30000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000001', 0, '10000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000002', 2) $$,
   '23514',
+  'new row for relation "lead_stage_history" violates check constraint "lead_stage_history_from_position_positive"',
   'from_position deve ser positiva quando preenchida'
 );
 
@@ -296,6 +313,7 @@ select throws_ok(
   $$ insert into public.lead_stage_history (organization_id, lead_id, from_pipeline_id, from_stage_id, from_position, to_pipeline_id, to_stage_id, to_position)
      values ('00000000-0000-0000-0000-000000000001', '30000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000011', 1, '10000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000001', 1) $$,
   '23503',
+  'insert or update on table "lead_stage_history" violates foreign key constraint "lead_stage_history_from_stage_same_pipeline"',
   'from_stage_id precisa pertencer ao from_pipeline_id informado'
 );
 
@@ -311,6 +329,7 @@ select throws_ok(
   $$ insert into public.lead_stage_history (organization_id, lead_id, from_pipeline_id, from_stage_id, from_position, to_pipeline_id, to_stage_id, to_position)
      values ('00000000-0000-0000-0000-000000000001', '30000000-0000-4000-8000-000000000001', null, null, null, '10000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000001', 1) $$,
   '42501',
+  'new row violates row-level security policy for table "lead_stage_history"',
   'authenticated não consegue INSERT direto em lead_stage_history (sem policy de INSERT)'
 );
 
